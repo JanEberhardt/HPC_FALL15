@@ -72,7 +72,7 @@ int main(int argc, char *argv[]){
     double b = 4.0;
 
     long n = 100;
-    int m;
+    int m = 0;
     if(argc == 2){
         n = std::stol(argv[1]);
     }
