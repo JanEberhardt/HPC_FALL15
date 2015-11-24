@@ -15,19 +15,15 @@ class Configuration{
         }
         void performSweep(){
             for(int n=0; n<Nx*Ny; n++){
-                int i = pickParticle();
-                //TODO: reuse this!
-                std::random_device rd;
-                std::mt19937 gen(rd());
-                std::uniform_real_distribution<> dis(-a, a);
+                int i = randomIndex(gen);
                 disc_t temp = discs[i];
-                while(doesOverlap(temp, i)){
-
-                }
-                double dx = dis(gen);
-                double dy = dis(gen);
+                double dx = randomDisplacement(gen);
+                double dy = randomDisplacement(gen);
                 temp.x += dx;
                 temp.y += dy;
+                if(!doesOverlap(temp, i)){
+                    discs[i] = temp;
+                }
             }
         }
 
@@ -36,8 +32,14 @@ class Configuration{
         double d0, a;
         double L = 1;
         std::vector<disc_t> discs;
+        std::mt19937 gen;
+        std::uniform_real_distribution<> randomDisplacement;
+        std::uniform_int_distribution<> randomIndex;
         void init(){
             discs = std::vector<disc_t> (Nx*Ny);
+            randomDisplacement = std::uniform_real_distribution<>(-a, a);
+            randomIndex = std::uniform_int_distribution<> (0, Nx*Ny);
+
             for(int i=0; i<Nx; i++){
                 for(int j=0; j<Ny; j++){
                     discs[i*Nx + j].x = L/Nx;
@@ -46,14 +48,6 @@ class Configuration{
                 }
             }
             std::cout << "initialization done!" << std::endl;
-        }
-
-        int pickParticle(){
-            //TODO: reuse this!
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            std::uniform_real_distribution<> dis(0, Nx*Ny);
-            return dis(gen);
         }
 
         bool doesOverlap(disc_t d, int allExcept){
