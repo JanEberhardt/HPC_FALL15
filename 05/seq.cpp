@@ -1,6 +1,7 @@
 #include <iostream>
 #include <random>
 #include <cmath>
+#include <fstream>
 #include "../inc/timer.hpp"
 struct disc_t {
     double x;
@@ -10,10 +11,16 @@ struct disc_t {
 
 class Configuration{
     public:
-        Configuration(int Nx_, int Ny_, double d0_, double a_): Nx(Nx_), Ny(Ny_), d0(d0_), a(a_) {
+        Configuration(int Nx_, int Ny_, int M_, double d0_, double a_): Nx(Nx_), Ny(Ny_), M(M_), d0(d0_), a(a_) {
             init();
+            histogram = std::vector<int> (M, 0);
         }
-        void performSweep(){
+
+        /**
+         * performs one sweep, which means Nx*Ny random updates
+         */
+        double performSweep(){
+            int overlap = 0;
             for(int n=0; n<Nx*Ny; n++){
                 int i = randomIndex(gen);
                 disc_t temp = discs[i];
@@ -21,70 +28,142 @@ class Configuration{
                 double dy = randomDisplacement(gen);
                 temp.x += dx;
                 temp.y += dy;
-                if(!doesOverlap(temp, i)){
+                if(doesOverlap(temp, i))
+                    overlap++;
+                else
                     discs[i] = temp;
+            }
+            return ((double) overlap)/(Nx*Ny);
+        }
+
+        /**
+         * updates the histogram
+         */
+        void updateHistogram(){
+            double max_distance2 = 2. * (L/2.) * (L/2.) / M;
+            double distance2;
+            int historyIndex;
+            for(int i=0; i<Nx*Ny; i++){
+                for(int j=0; j<i; j++){
+                    // get the minimal distance
+                    distance2 = min_distance2(discs[i], discs[j]); 
+                    // increment the histogram value that this corresponds to
+                    historyIndex = (distance2/max_distance2) * M;
+                    histogram[historyIndex]++;
                 }
             }
         }
 
+        /**
+         * prints the histogram to a file
+         */
+        void printHistToFile(std::string filename){
+            std::ofstream ofs(filename);
+            for(int i=0; i<M; i++){
+                ofs << histogram[i] << ";" << std::endl;
+            }
+        }
+
+        /**
+         * prints the set of discs to a file
+         */
+        void printToFile(std::string filename){
+            std::ofstream ofs(filename);
+            for(int i=0; i<Nx*Ny; i++){
+                ofs << discs[i].x << ", " << discs[i].y << ", " << discs[i].d << ";" << std::endl;
+            }
+        }
+
     private:
-        int Nx, Ny;
+        int Nx, Ny, M;
         double d0, a;
         double L = 1;
         std::vector<disc_t> discs;
+        std::vector<int> histogram;
         std::mt19937 gen;
         std::uniform_real_distribution<> randomDisplacement;
         std::uniform_int_distribution<> randomIndex;
+
+        /**
+         * does initialization
+         */
         void init(){
             discs = std::vector<disc_t> (Nx*Ny);
             randomDisplacement = std::uniform_real_distribution<>(-a, a);
             randomIndex = std::uniform_int_distribution<> (0, Nx*Ny);
-
             for(int i=0; i<Nx; i++){
                 for(int j=0; j<Ny; j++){
-                    discs[i*Nx + j].x = L/Nx;
-                    discs[i*Nx + j].y = std::sqrt(3)/2 * discs[i*Nx + j].x;
+                    discs[i*Nx + j].x = (L/Nx)*(i+1);
+                    discs[i*Nx + j].y = (std::sqrt(3)/2 * (L/Nx)) * (j+1);
                     discs[i*Nx + j].d = d0;
                 }
             }
             std::cout << "initialization done!" << std::endl;
         }
 
+        /**
+         * returns whether disc d overlaps with any of the other discs,
+         * allExcept is just the index of disc d in the discs vector
+         */
         bool doesOverlap(disc_t d, int allExcept){
             for(int i=0; i<Nx*Ny; i++){
                 if(i==allExcept)
                     continue;
-                if(std::sqrt((d.x-discs[i].x)*(d.x-discs[i].x)+
-                            (d.y-discs[i].y)*(d.y-discs[i].y))>d.d)
-                    return false;
+                //todo: this assumes all discs are the syme size
+                if((d.x-discs[i].x)*(d.x-discs[i].x)+
+                            (d.y-discs[i].y)*(d.y-discs[i].y) < (d.d*d.d+discs[i].d*discs[i].d))
+                    return true;
             }
-            return true;
+            return false;
+        }
+
+        /**
+         * returns the minimal discance square of two points
+         */
+        double min_distance2 (disc_t a, disc_t b){
+            double xdiff2normal = a.x - b.x;
+            xdiff2normal = xdiff2normal * xdiff2normal;
+            double xdiff2abnormal = (1-a.x) - b.x;
+            if(xdiff2abnormal < xdiff2normal)
+                xdiff2normal = xdiff2abnormal;
+            double ydiff2normal = a.y - b.y;
+            ydiff2normal = ydiff2normal * ydiff2normal;
+            double ydiff2abnormal = (1-a.y) - b.y;
+            if(ydiff2abnormal < ydiff2normal)
+                ydiff2normal = ydiff2abnormal;
+            return xdiff2normal + ydiff2normal;
         }
 };
 
 int main(int arg_c, char* arg_v[]){
-    if(arg_c != 7){
+    if(arg_c != 8){
         std::cout << "wrong usage!" << std::endl;
         return 1;
     }
     int Nx = std::stoi(arg_v[1]);
     int Ny = std::stoi(arg_v[2]);
-    double d0 = std::stod(arg_v[3]);
-    double a = std::stoi(arg_v[4]);
-    int Sequi = std::stoi(arg_v[5]);
-    int S = std::stoi(arg_v[6]);
-    Configuration c (Nx, Ny, d0, a);
+    int M = std::stoi(arg_v[3]);
+    double d0 = std::stod(arg_v[4]);
+    double a = std::stoi(arg_v[5]);
+    double overlapRatio;
+    int Sequi = std::stoi(arg_v[6]);
+    int S = std::stoi(arg_v[7]);
+    Configuration c (Nx, Ny, M, d0, a);
     // equilibrate the system
+    c.printToFile("config_initial.txt");
     for(int i=0;i<Sequi;i++){
-        c.performSweep();
+        overlapRatio = c.performSweep();
+        std::cout << "sweep, overlap ratio: " << overlapRatio << std::endl;
     }
 
     for(int i=0;i<S;i++){
-        c.performSweep();
-        //TODO
-        //c.doAnalysis();
+        overlapRatio = c.performSweep();
+        c.updateHistogram();
+        std::cout << "sweep and update performed, overlap ratio: " << overlapRatio << std::endl;
     }
+    c.printToFile("config_final.txt");
     //TODO: get the output we're interested in!
+    c.printHistToFile("histogram.txt");
     std::cout << "output:" << std::endl;
     return 0;
 }
