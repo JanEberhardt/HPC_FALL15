@@ -22,6 +22,7 @@ class Configuration{
          */
         double performSweep(){
             int overlap = 0;
+#pragma omp parallel for
             for(int n=0; n<Nx*Ny; n++){
                 int i = randomIndex(gen);
                 disc_t temp = discs[i];
@@ -44,6 +45,7 @@ class Configuration{
             double max_distance2 = 2. * (L/2.) * (L/2.);
             double distance2;
             int historyIndex;
+#pragma omp parallel for
             for(int i=0; i<Nx*Ny; i++){
                 for(int j=0; j<i; j++){
                     // get the minimal distance
